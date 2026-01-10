@@ -1,0 +1,50 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.schuurman.rvc">
+
+    <!-- Camera preview -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Receive boot to start gear monitoring early -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Car property access (signature/privileged in AAOS) -->
+    <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
+
+    <!-- Optional but often useful for uninterrupted UX across users -->
+    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+    <application
+        android:label="@string/app_name"
+        android:persistent="true"
+        android:directBootAware="true"
+        android:usesCleartextTraffic="false">
+
+        <receiver
+            android:name=".BootReceiver"
+            android:directBootAware="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".GearMonitorService"
+            android:directBootAware="true"
+            android:exported="false" />
+
+        <activity
+            android:name=".RearViewCameraActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:resizeableActivity="false">
+        </activity>
+
+    </application>
+</manifest>

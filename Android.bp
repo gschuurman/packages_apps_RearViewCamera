@@ -1,0 +1,15 @@
+android_app {
+    name: "RearViewCamera",
+    srcs: ["src/**/*.java"],
+    resource_dirs: ["res"],
+    manifest: "AndroidManifest.xml",
+
+    platform_apis: true,
+    privileged: true,
+    certificate: "platform",
+
+    // Ensure car framework is on the classpath for compilation.
+    libs: [
+        "android.car",
+    ],
+}
