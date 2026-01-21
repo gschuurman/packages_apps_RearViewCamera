@@ -13,3 +13,14 @@ android_app {
         "android.car",
     ],
 }
+
+prebuilt_etc {
+    name: "privapp-permissions-com.schuurman.rvc",
+    src: "permissions/privapp-permissions-com.schuurman.rvc.xml",
+    sub_dir: "permissions",
+    filename_from_src: true,
+
+    system_ext_specific: false,
+    product_specific: false,
+    vendor: false,
+}

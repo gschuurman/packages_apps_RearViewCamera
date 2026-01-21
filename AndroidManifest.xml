@@ -3,6 +3,8 @@
 
     <!-- Camera preview -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.CAMERA_HEADLESS_SYSTEM_USER" />
+    <uses-permission android:name="android.permission.SYSTEM_CAMERA" />
 
     <!-- Receive boot to start gear monitoring early -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
