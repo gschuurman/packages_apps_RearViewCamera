@@ -1,3 +1,28 @@
-<resources>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_name">Rear View Camera</string>
+
+    <string name="rvc_settings_title">Rear view camera</string>
+    <string name="rvc_settings_summary">Camera, video stream, image</string>
+
+    <string name="rvc_camera_title">Camera</string>
+    <string name="rvc_camera_auto">Automatic (first external camera)</string>
+    <string name="rvc_camera_entry">External camera <xliff:g id="id" example="0">%1$s</xliff:g></string>
+    <string name="rvc_no_camera">No camera connected</string>
+
+    <string name="rvc_stream_title">Video stream</string>
+    <string name="rvc_stream_auto">Automatic</string>
+    <string name="rvc_stream_entry"><xliff:g id="width" example="720">%1$d</xliff:g> × <xliff:g id="height" example="576">%2$d</xliff:g></string>
+    <string name="rvc_stream_pal"><xliff:g id="size" example="720 × 576">%1$s</xliff:g> (PAL)</string>
+    <string name="rvc_stream_ntsc"><xliff:g id="size" example="720 × 480">%1$s</xliff:g> (NTSC)</string>
+
+    <string name="rvc_scale_title">Image size</string>
+    <string name="rvc_scale_fit">Fit (whole image, black bars)</string>
+    <string name="rvc_scale_fill">Fill (crop to the screen)</string>
+    <string name="rvc_scale_stretch">Stretch (fill, distorted)</string>
+
+    <string name="rvc_mirror_title">Mirror image</string>
+    <string name="rvc_mirror_summary">Flip the image horizontally, like a mirror</string>
+
+    <string name="rvc_preview_title">Show camera</string>
+    <string name="rvc_preview_summary">Check the image with these settings</string>
 </resources>

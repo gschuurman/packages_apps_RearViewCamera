@@ -5,22 +5,22 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.SurfaceView;
-import android.view.View;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
+import android.view.TextureView;
 import android.view.WindowManager;
 
+/**
+ * Full screen rear view camera. Started when reverse gear is selected (and finished again by
+ * {@link GearMonitorService}), or from the settings screen to preview the configuration.
+ */
 public final class RearViewCameraActivity extends Activity {
 
     private static final String TAG = "RVC.Activity";
     static final String ACTION_FINISH_RVC = "com.schuurman.rvc.action.FINISH";
 
     private Camera2Controller mCamera2;
-    private SurfaceView mPreview;
+    private TextureView mPreview;
 
     private boolean mReceiverRegistered = false;
 
@@ -50,32 +50,17 @@ public final class RearViewCameraActivity extends Activity {
 
         mPreview = findViewById(R.id.preview);
         mCamera2 = new Camera2Controller(this);
-
-        hideSystemUi();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
 
-        // ✅ Android 13+ requires explicit exported/not-exported flag
         if (!mReceiverRegistered) {
-            IntentFilter filter = new IntentFilter(ACTION_FINISH_RVC);
-
-            if (Build.VERSION.SDK_INT >= 33) {
-                registerReceiver(
-                        mFinishReceiver,
-                        filter,
-                        Context.RECEIVER_NOT_EXPORTED
-                );
-            } else {
-                registerReceiver(mFinishReceiver, filter);
-            }
-
+            registerReceiver(mFinishReceiver, new IntentFilter(ACTION_FINISH_RVC),
+                    Context.RECEIVER_NOT_EXPORTED);
             mReceiverRegistered = true;
         }
-
-        hideSystemUi();
 
         // Start camera AFTER receiver registration
         mCamera2.start(mPreview);
@@ -96,27 +81,5 @@ public final class RearViewCameraActivity extends Activity {
         }
 
         super.onPause();
-    }
-
-    private void hideSystemUi() {
-        View decorView = getWindow().getDecorView();
-        WindowInsetsController controller = decorView.getWindowInsetsController();
-
-        if (controller != null) {
-            controller.hide(
-                    WindowInsets.Type.statusBars()
-                            | WindowInsets.Type.navigationBars()
-            );
-            controller.setSystemBarsBehavior(
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            );
-        } else {
-            // Legacy fallback
-            decorView.setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                            | View.SYSTEM_UI_FLAG_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            );
-        }
     }
 }

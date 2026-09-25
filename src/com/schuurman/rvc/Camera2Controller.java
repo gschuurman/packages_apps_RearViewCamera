@@ -1,317 +1,300 @@
 package com.schuurman.rvc;
 
 import android.content.Context;
-import android.hardware.camera2.*;
+import android.graphics.Matrix;
+import android.graphics.SurfaceTexture;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CameraMetadata;
+import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
-import android.view.SurfaceHolder;
-import android.view.SurfaceView;
+import android.view.TextureView;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
+/**
+ * Shows the rear view camera in a TextureView, using the camera, stream size, mirroring and scaling
+ * configured in the settings (see {@link RvcConfig}).
+ */
 final class Camera2Controller {
     private static final String TAG = "RVC.Camera2";
 
-    // Delay to allow SurfaceFlinger to commit fixed buffer geometry before HAL binds.
-    private static final long OPEN_CAMERA_DELAY_MS = 50L;
-
-    // One-time restart to force clean stream/buffer negotiation on some AAOS stacks.
-    private static final long RESTART_PREVIEW_DELAY_MS = 100L;
-
-    private final Context mContext;
     private final CameraManager mCameraManager;
 
     private HandlerThread mThread;
     private Handler mHandler;
 
+    private TextureView mView;
     private CameraDevice mCamera;
     private CameraCaptureSession mSession;
-
-    private String mCameraId;
+    private Surface mSurface;
     private Size mPreviewSize;
-
-    // Track whether start() has been called; prevents reentry from callback + "surface already valid" path.
     private boolean mStarted;
 
-    // Keep reference to the current holder to control buffer sizing.
-    private SurfaceHolder mHolder;
+    private final TextureView.SurfaceTextureListener mTextureListener =
+            new TextureView.SurfaceTextureListener() {
+                @Override
+                public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
+                    openCamera(texture);
+                }
 
-    Camera2Controller(Context ctx) {
-        mContext = ctx;
-        mCameraManager = (CameraManager) ctx.getSystemService(Context.CAMERA_SERVICE);
+                @Override
+                public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width,
+                        int height) {
+                    updateTransform();
+                }
+
+                @Override
+                public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
+                    stop();
+                    return true;
+                }
+
+                @Override
+                public void onSurfaceTextureUpdated(SurfaceTexture texture) {}
+            };
+
+    Camera2Controller(Context context) {
+        mCameraManager = context.getSystemService(CameraManager.class);
     }
 
-    void start(SurfaceView surfaceView) {
-        startThread();
-
+    void start(TextureView view) {
+        if (mStarted) return;
         mStarted = true;
-        mHolder = surfaceView.getHolder();
+        mView = view;
+        mThread = new HandlerThread("rvc-camera2");
+        mThread.start();
+        mHandler = new Handler(mThread.getLooper());
 
-        mHolder.addCallback(new SurfaceHolder.Callback() {
-            @Override
-            public void surfaceCreated(SurfaceHolder holder) {
-                // IMPORTANT: open using holder, not surface, so we can setFixedSize first.
-                openExternalCameraAndStartPreview(holder);
-            }
-
-            @Override
-            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-                // If surface changes while running, rebuild cleanly.
-                // This avoids stale buffers with different geometry.
-                if (!mStarted) return;
-                restartPreviewIfRunning(holder);
-            }
-
-            @Override
-            public void surfaceDestroyed(SurfaceHolder holder) {
-                stop();
-            }
-        });
-
-        // If surface already exists, start immediately (but still go through holder path).
-        Surface s = mHolder.getSurface();
-        if (s != null && s.isValid()) {
-            openExternalCameraAndStartPreview(mHolder);
+        view.setSurfaceTextureListener(mTextureListener);
+        if (view.isAvailable()) {
+            openCamera(view.getSurfaceTexture());
         }
     }
 
     void stop() {
+        if (!mStarted) return;
         mStarted = false;
-        closeSession();
-        closeCamera();
-        stopThread();
-        mHolder = null;
-    }
-
-    private void startThread() {
-        if (mThread != null) return;
-        mThread = new HandlerThread("rvc-camera2");
-        mThread.start();
-        mHandler = new Handler(mThread.getLooper());
-    }
-
-    private void stopThread() {
-        if (mThread == null) return;
-        mThread.quitSafely();
+        final HandlerThread thread = mThread;
+        mHandler.post(() -> {
+            closeCamera();
+            thread.quitSafely();
+        });
         mThread = null;
         mHandler = null;
+        mView = null;
     }
 
-    /**
-     * AAOS fix: lock Surface buffer geometry BEFORE opening camera.
-     * Many external camera/HWC stacks glitch if HAL binds to a transient Surface buffer size.
-     */
-    private void openExternalCameraAndStartPreview(SurfaceHolder holder) {
-        if (!mStarted || holder == null) return;
-        if (mHandler == null) return;
-
-        // Prevent double opens from (a) surfaceCreated and (b) "surface already valid" path.
-        if (mCamera != null) return;
-
-        mHandler.post(() -> {
+    private void openCamera(SurfaceTexture texture) {
+        if (!mStarted) return;
+        final Handler handler = mHandler;
+        handler.post(() -> {
+            if (mCamera != null) return;
             try {
-                mCameraId = findExternalCameraId();
-                if (mCameraId == null) {
-                    Log.e(TAG, "No EXTERNAL camera found");
+                final String cameraId = findCameraId(mCameraManager, RvcConfig.getCameraId());
+                if (cameraId == null) {
+                    Log.e(TAG, "No external camera found");
                     return;
                 }
+                mPreviewSize = chooseStreamSize(mCameraManager, cameraId, RvcConfig.getStreamSize());
+                Log.i(TAG, "Opening camera " + cameraId + " stream " + mPreviewSize);
 
-                mPreviewSize = choosePreviewSize(mCameraId);
-                Log.i(TAG, "Opening cameraId=" + mCameraId + " preview=" + mPreviewSize);
+                // The buffers must have the stream's size, or the image is scaled/distorted twice.
+                texture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
+                mSurface = new Surface(texture);
+                updateTransform();
 
-                // CRITICAL: force buffer queue to match camera stream size.
-                // This avoids first-open stride/segment distortion.
-                holder.setFixedSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
-
-                final Surface surface = holder.getSurface();
-                if (surface == null || !surface.isValid()) {
-                    Log.e(TAG, "Surface not valid after setFixedSize()");
-                    return;
-                }
-
-                // Let SurfaceFlinger commit the new geometry before HAL binds.
-                mHandler.postDelayed(() -> {
-                    if (!mStarted || mCamera != null) return;
-
-                    try {
-                        mCameraManager.openCamera(mCameraId, new CameraDevice.StateCallback() {
-                            @Override
-                            public void onOpened(CameraDevice camera) {
-                                mCamera = camera;
-                                createPreviewSession(surface);
-                            }
-
-                            @Override
-                            public void onDisconnected(CameraDevice camera) {
-                                Log.w(TAG, "Camera disconnected");
-                                closeCamera();
-                            }
-
-                            @Override
-                            public void onError(CameraDevice camera, int error) {
-                                Log.e(TAG, "Camera error=" + error);
-                                closeCamera();
-                            }
-                        }, mHandler);
-                    } catch (SecurityException se) {
-                        Log.e(TAG, "Missing CAMERA permission or blocked by policy", se);
-                    } catch (Exception e) {
-                        Log.e(TAG, "Failed to open camera", e);
+                mCameraManager.openCamera(cameraId, new CameraDevice.StateCallback() {
+                    @Override
+                    public void onOpened(CameraDevice camera) {
+                        if (!mStarted) {
+                            camera.close();
+                            return;
+                        }
+                        mCamera = camera;
+                        createSession();
                     }
-                }, OPEN_CAMERA_DELAY_MS);
 
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to prepare camera", e);
+                    @Override
+                    public void onDisconnected(CameraDevice camera) {
+                        Log.w(TAG, "Camera disconnected");
+                        closeCamera();
+                    }
+
+                    @Override
+                    public void onError(CameraDevice camera, int error) {
+                        Log.e(TAG, "Camera error " + error);
+                        closeCamera();
+                    }
+                }, handler);
+            } catch (CameraAccessException | SecurityException | IllegalArgumentException e) {
+                Log.e(TAG, "Failed to open camera", e);
             }
         });
     }
 
-    private void restartPreviewIfRunning(SurfaceHolder holder) {
-        if (mHandler == null) return;
-        mHandler.post(() -> {
-            // Only restart if we already have a camera; otherwise surfaceCreated will handle it.
-            if (mCamera == null) return;
-
-            Log.i(TAG, "Surface changed; restarting preview session");
-            closeSession();
-
-            // Re-assert fixed size in case SurfaceView changed its buffers.
-            if (mPreviewSize != null && holder != null) {
-                try {
-                    holder.setFixedSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
-                } catch (Exception ignored) {}
-            }
-
-            Surface surface = holder != null ? holder.getSurface() : null;
-            if (surface != null && surface.isValid()) {
-                createPreviewSession(surface);
-            }
-        });
-    }
-
-    private String findExternalCameraId() throws CameraAccessException {
-        for (String id : mCameraManager.getCameraIdList()) {
-            CameraCharacteristics c = mCameraManager.getCameraCharacteristics(id);
-            Integer facing = c.get(CameraCharacteristics.LENS_FACING);
-            if (facing != null && facing == CameraCharacteristics.LENS_FACING_EXTERNAL) {
-                return id;
-            }
-        }
-        return null;
-    }
-
-    private Size choosePreviewSize(String cameraId) throws CameraAccessException {
-        CameraCharacteristics c = mCameraManager.getCameraCharacteristics(cameraId);
-        StreamConfigurationMap map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-        if (map == null) {
-            return new Size(640, 480);
-        }
-
-        // Prefer SurfaceHolder sizes (SurfaceView), otherwise fall back.
-        Size[] sizes = map.getOutputSizes(SurfaceHolder.class);
-        if (sizes == null || sizes.length == 0) {
-            sizes = map.getOutputSizes(Surface.class);
-        }
-        if (sizes == null || sizes.length == 0) {
-            return new Size(640, 480);
-        }
-
-        // Prefer 1280x720 if available; else pick the largest <= 1920x1080; else largest.
-        for (Size s : sizes) {
-            if (s.getWidth() == 1280 && s.getHeight() == 720) {
-                return s;
-            }
-        }
-
-        Size best = null;
-        for (Size s : sizes) {
-            if (s.getWidth() <= 1920 && s.getHeight() <= 1080) {
-                if (best == null ||
-                        (s.getWidth() * s.getHeight()) > (best.getWidth() * best.getHeight())) {
-                    best = s;
-                }
-            }
-        }
-        if (best != null) return best;
-
-        best = sizes[0];
-        for (Size s : sizes) {
-            if ((s.getWidth() * s.getHeight()) > (best.getWidth() * best.getHeight())) {
-                best = s;
-            }
-        }
-        return best;
-    }
-
-    private void createPreviewSession(Surface surface) {
-        if (mCamera == null || surface == null || !surface.isValid()) return;
-
+    private void createSession() {
         try {
-            final CaptureRequest.Builder req =
+            final CaptureRequest.Builder request =
                     mCamera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            req.addTarget(surface);
-            req.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-
-            mCamera.createCaptureSession(Arrays.asList(surface),
+            request.addTarget(mSurface);
+            request.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+            mCamera.createCaptureSession(Arrays.asList(mSurface),
                     new CameraCaptureSession.StateCallback() {
                         @Override
                         public void onConfigured(CameraCaptureSession session) {
                             mSession = session;
                             try {
-                                final CaptureRequest previewRequest = req.build();
-                                session.setRepeatingRequest(previewRequest, null, mHandler);
+                                session.setRepeatingRequest(request.build(), null, mHandler);
                                 Log.i(TAG, "Preview started");
-
-                                // One-time restart: fixes certain external camera/HWC first-bind glitches.
-                                mHandler.postDelayed(() -> {
-                                    try {
-                                        if (mSession != null) {
-                                            mSession.stopRepeating();
-                                            mSession.setRepeatingRequest(previewRequest, null, mHandler);
-                                            Log.i(TAG, "Preview restarted (stability pass)");
-                                        }
-                                    } catch (Exception ignored) {}
-                                }, RESTART_PREVIEW_DELAY_MS);
-
-                            } catch (Exception e) {
-                                Log.e(TAG, "Failed to start repeating request", e);
+                            } catch (CameraAccessException | IllegalStateException e) {
+                                Log.e(TAG, "Failed to start the preview", e);
                             }
                         }
 
                         @Override
                         public void onConfigureFailed(CameraCaptureSession session) {
-                            Log.e(TAG, "Preview session configure failed");
-                            closeSession();
+                            Log.e(TAG, "Preview session configuration failed");
                         }
                     }, mHandler);
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to create preview session", e);
-            closeSession();
-        }
-    }
-
-    private void closeSession() {
-        if (mSession != null) {
-            try {
-                mSession.stopRepeating();
-            } catch (Exception ignored) {}
-            try {
-                mSession.close();
-            } catch (Exception ignored) {}
-            mSession = null;
+        } catch (CameraAccessException | IllegalStateException e) {
+            Log.e(TAG, "Failed to create the preview session", e);
         }
     }
 
     private void closeCamera() {
+        if (mSession != null) {
+            mSession.close();
+            mSession = null;
+        }
         if (mCamera != null) {
-            try {
-                mCamera.close();
-            } catch (Exception ignored) {}
+            mCamera.close();
             mCamera = null;
         }
+        if (mSurface != null) {
+            mSurface.release();
+            mSurface = null;
+        }
+    }
+
+    /** Scales the stream into the view as configured (fit/fill/stretch), mirrored if configured. */
+    private void updateTransform() {
+        final TextureView view = mView;
+        final Size size = mPreviewSize;
+        if (view == null || size == null) return;
+        view.post(() -> {
+            final float viewWidth = view.getWidth();
+            final float viewHeight = view.getHeight();
+            if (viewWidth == 0 || viewHeight == 0) return;
+
+            // A TextureView stretches the buffer to the whole view; undo that for fit/fill.
+            float scaleX = 1f;
+            float scaleY = 1f;
+            final String scale = RvcConfig.getScale();
+            if (!RvcConfig.SCALE_STRETCH.equals(scale)) {
+                final float aspect = getDisplayAspect(size);
+                final float viewAspect = viewWidth / viewHeight;
+                final boolean fit = !RvcConfig.SCALE_FILL.equals(scale);
+                if ((viewAspect > aspect) == fit) {
+                    scaleX = aspect / viewAspect;   // full height
+                } else {
+                    scaleY = viewAspect / aspect;   // full width
+                }
+            }
+            if (RvcConfig.isMirrored()) {
+                scaleX = -scaleX;
+            }
+            final Matrix matrix = new Matrix();
+            matrix.setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f);
+            view.setTransform(matrix);
+        });
+    }
+
+    /**
+     * Analog (PAL/NTSC) capture sizes have non-square pixels: their picture is 4:3 whatever the
+     * number of samples per line.
+     */
+    static float getDisplayAspect(Size size) {
+        if (isAnalogSize(size)) {
+            return 4f / 3f;
+        }
+        return (float) size.getWidth() / size.getHeight();
+    }
+
+    static boolean isAnalogSize(Size size) {
+        final int w = size.getWidth();
+        final int h = size.getHeight();
+        return (w == 720 || w == 704 || w == 640) && (h == 576 || h == 480 || h == 288 || h == 240)
+                && !(w == 640 && h == 480);
+    }
+
+    /** @return the external cameras, in camera id order */
+    static List<String> getExternalCameraIds(CameraManager manager) throws CameraAccessException {
+        final List<String> ids = new ArrayList<>();
+        for (String id : manager.getCameraIdList()) {
+            final Integer facing =
+                    manager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING);
+            if (facing != null && facing == CameraCharacteristics.LENS_FACING_EXTERNAL) {
+                ids.add(id);
+            }
+        }
+        return ids;
+    }
+
+    /** @return the configured camera if it is connected, else the first external camera */
+    static String findCameraId(CameraManager manager, String configured)
+            throws CameraAccessException {
+        final List<String> ids = getExternalCameraIds(manager);
+        if (ids.contains(configured)) {
+            return configured;
+        }
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    /** @return the stream sizes the camera offers for a preview, largest first */
+    static Size[] getStreamSizes(CameraManager manager, String cameraId)
+            throws CameraAccessException {
+        final StreamConfigurationMap map = manager.getCameraCharacteristics(cameraId)
+                .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+        final Size[] sizes = map == null ? null : map.getOutputSizes(SurfaceTexture.class);
+        if (sizes == null) {
+            return new Size[0];
+        }
+        Arrays.sort(sizes, (a, b) -> Long.compare((long) b.getWidth() * b.getHeight(),
+                (long) a.getWidth() * a.getHeight()));
+        return sizes;
+    }
+
+    /**
+     * @return the configured size if the camera offers it; else, automatically, the camera's
+     *         native analog size if it has one (upscaled modes only blur the picture), else the
+     *         largest size up to 1920x1080
+     */
+    static Size chooseStreamSize(CameraManager manager, String cameraId, Size configured)
+            throws CameraAccessException {
+        final Size[] sizes = getStreamSizes(manager, cameraId);
+        if (sizes.length == 0) {
+            return new Size(640, 480);
+        }
+        for (Size size : sizes) {
+            if (size.equals(configured)) return size;
+        }
+        for (Size size : sizes) {
+            if (isAnalogSize(size)) return size;
+        }
+        for (Size size : sizes) {
+            if (size.getWidth() <= 1920 && size.getHeight() <= 1080) return size;
+        }
+        return sizes[sizes.length - 1];
     }
 }

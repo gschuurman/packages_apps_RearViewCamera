@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Values are kept in persist.rvc.* (see RvcConfig), not in SharedPreferences. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <ListPreference
+        android:key="camera_id"
+        android:persistent="true"
+        android:title="@string/rvc_camera_title" />
+
+    <ListPreference
+        android:key="stream_size"
+        android:persistent="true"
+        android:title="@string/rvc_stream_title" />
+
+    <ListPreference
+        android:defaultValue="fit"
+        android:entries="@array/rvc_scale_entries"
+        android:entryValues="@array/rvc_scale_values"
+        android:key="scale"
+        android:persistent="true"
+        android:title="@string/rvc_scale_title"
+        app:useSimpleSummaryProvider="true" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="mirror"
+        android:persistent="true"
+        android:summary="@string/rvc_mirror_summary"
+        android:title="@string/rvc_mirror_title" />
+
+    <Preference
+        android:key="preview"
+        android:summary="@string/rvc_preview_summary"
+        android:title="@string/rvc_preview_title" />
+
+</PreferenceScreen>

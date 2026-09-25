@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="rvc_scale_entries">
+        <item>@string/rvc_scale_fit</item>
+        <item>@string/rvc_scale_fill</item>
+        <item>@string/rvc_scale_stretch</item>
+    </string-array>
+    <string-array name="rvc_scale_values" translatable="false">
+        <item>fit</item>
+        <item>fill</item>
+        <item>stretch</item>
+    </string-array>
+</resources>

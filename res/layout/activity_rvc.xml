@@ -3,9 +3,11 @@
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@android:color/black"
     android:keepScreenOn="true">
 
-    <SurfaceView
+    <!-- A TextureView (not a SurfaceView) so the image can be mirrored and scaled with a matrix. -->
+    <TextureView
         android:id="@+id/preview"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />

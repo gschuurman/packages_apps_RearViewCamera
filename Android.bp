@@ -12,6 +12,13 @@ android_app {
     libs: [
         "android.car",
     ],
+
+    // The settings screen (RvcSettingsActivity) uses the car UI library, like CarSettings.
+    static_libs: [
+        "androidx.fragment_fragment",
+        "androidx.preference_preference",
+        "car-ui-lib",
+    ],
 }
 
 prebuilt_etc {
