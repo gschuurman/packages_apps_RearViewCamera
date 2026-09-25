@@ -1,0 +1,21 @@
+// Rear view camera while Android boots: see rvc_early.cpp.
+cc_binary {
+    name: "rvc_early",
+    srcs: ["rvc_early.cpp"],
+    init_rc: ["rvc_early.rc"],
+    defaults: ["vhalclient_defaults"],
+    static_libs: ["libvhalclient"],
+    shared_libs: [
+        "android.frameworks.automotive.display-V2-ndk",
+        "libbase",
+        "libbinder_ndk",
+        "libcamera2ndk",
+        "liblog",
+        "libmediandk",
+        "libnativewindow",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}
