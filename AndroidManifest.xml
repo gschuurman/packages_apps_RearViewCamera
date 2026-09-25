@@ -42,10 +42,12 @@
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
             android:taskAffinity=""
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
+            android:theme="@style/Theme.RvcCamera"
             android:showOnLockScreen="true"
             android:turnScreenOn="true"
             android:resizeableActivity="false">
+            <!-- Safety view: allowed while driving (car UX restrictions), settings panel included. -->
+            <meta-data android:name="distractionOptimized" android:value="true" />
         </activity>
 
         <!-- Settings, shown as a top-level entry in CarSettings (injected settings: system apps only). -->

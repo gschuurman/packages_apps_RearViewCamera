@@ -6,10 +6,32 @@
     android:background="@android:color/black"
     android:keepScreenOn="true">
 
-    <!-- A TextureView (not a SurfaceView) so the image can be mirrored and scaled with a matrix. -->
+    <!-- A TextureView (not a SurfaceView) so the image can be mirrored and scaled with a matrix.
+         While the settings panel is open it only uses the space left of the panel. -->
     <TextureView
         android:id="@+id/preview"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <!-- The rear view camera settings (RvcSettingsFragment), next to the live image. -->
+    <FrameLayout
+        android:id="@+id/settings_panel"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:background="?android:attr/colorBackground"
+        android:visibility="gone" />
+
+    <ImageButton
+        android:id="@+id/settings_button"
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:layout_gravity="top|start"
+        android:layout_margin="16dp"
+        android:background="@drawable/bg_rvc_button"
+        android:contentDescription="@string/rvc_settings_title"
+        android:padding="16dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_rvc_tune" />
 
 </FrameLayout>

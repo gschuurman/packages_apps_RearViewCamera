@@ -95,6 +95,23 @@ final class Camera2Controller {
         mView = null;
     }
 
+    /**
+     * Applies a changed setting while the preview runs: another camera or stream reopens the camera,
+     * mirroring and scaling only change the transform.
+     */
+    void applyConfig(String key) {
+        if (!mStarted) return;
+        if (RvcConfig.KEY_CAMERA_ID.equals(key) || RvcConfig.KEY_STREAM_SIZE.equals(key)) {
+            // Both run on the camera thread, in this order.
+            mHandler.post(this::closeCamera);
+            if (mView.isAvailable()) {
+                openCamera(mView.getSurfaceTexture());
+            }
+        } else {
+            updateTransform();
+        }
+    }
+
     private void openCamera(SurfaceTexture texture) {
         if (!mStarted) return;
         final Handler handler = mHandler;

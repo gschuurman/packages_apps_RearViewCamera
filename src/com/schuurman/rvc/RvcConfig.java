@@ -1,9 +1,13 @@
 package com.schuurman.rvc;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemProperties;
 import android.util.Size;
 
 import androidx.preference.PreferenceDataStore;
+
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Rear view camera settings, kept in system properties (persist.rvc.*).
@@ -28,7 +32,31 @@ final class RvcConfig {
     static final String SCALE_FILL = "fill";
     static final String SCALE_STRETCH = "stretch";
 
+    /** Told about a setting changed in this process (the settings panel on the camera screen). */
+    interface Listener {
+        void onRvcConfigChanged(String key);
+    }
+
+    private static final CopyOnWriteArrayList<Listener> sListeners = new CopyOnWriteArrayList<>();
+    private static final Handler sMainHandler = new Handler(Looper.getMainLooper());
+
     private RvcConfig() {}
+
+    static void addListener(Listener listener) {
+        sListeners.addIfAbsent(listener);
+    }
+
+    static void removeListener(Listener listener) {
+        sListeners.remove(listener);
+    }
+
+    private static void notifyChanged(String key) {
+        sMainHandler.post(() -> {
+            for (Listener listener : sListeners) {
+                listener.onRvcConfigChanged(key);
+            }
+        });
+    }
 
     static String getCameraId() {
         return get(KEY_CAMERA_ID, "");
@@ -68,6 +96,7 @@ final class RvcConfig {
         @Override
         public void putString(String key, String value) {
             SystemProperties.set(PREFIX + key, value == null ? "" : value);
+            notifyChanged(key);
         }
 
         @Override
@@ -78,6 +107,7 @@ final class RvcConfig {
         @Override
         public void putBoolean(String key, boolean value) {
             SystemProperties.set(PREFIX + key, Boolean.toString(value));
+            notifyChanged(key);
         }
 
         @Override

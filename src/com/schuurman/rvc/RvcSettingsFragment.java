@@ -22,6 +22,16 @@ import java.util.List;
 public final class RvcSettingsFragment extends PreferenceFragment {
     private static final String TAG = "RVC.Settings";
     private static final String KEY_PREVIEW = "preview";
+    private static final String ARG_IN_CAMERA = "in_camera";
+
+    /** The settings as a panel on the camera screen: no "show camera" entry there. */
+    static RvcSettingsFragment newInCameraInstance() {
+        final RvcSettingsFragment fragment = new RvcSettingsFragment();
+        final Bundle args = new Bundle();
+        args.putBoolean(ARG_IN_CAMERA, true);
+        fragment.setArguments(args);
+        return fragment;
+    }
 
     private CameraManager mCameraManager;
 
@@ -37,10 +47,15 @@ public final class RvcSettingsFragment extends PreferenceFragment {
             updateStreamSizes((String) value);
             return true;
         });
-        findPreference(KEY_PREVIEW).setOnPreferenceClickListener(p -> {
-            startActivity(new Intent(requireContext(), RearViewCameraActivity.class));
-            return true;
-        });
+        final Preference preview = findPreference(KEY_PREVIEW);
+        if (getArguments() != null && getArguments().getBoolean(ARG_IN_CAMERA)) {
+            getPreferenceScreen().removePreference(preview);
+        } else {
+            preview.setOnPreferenceClickListener(p -> {
+                startActivity(new Intent(requireContext(), RearViewCameraActivity.class));
+                return true;
+            });
+        }
     }
 
     @Override
