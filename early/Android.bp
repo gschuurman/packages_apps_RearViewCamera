@@ -1,18 +1,63 @@
-// Rear view camera while Android boots: see rvc_early.cpp.
+// Rear view camera while Android boots: rvc_early (camera, as AID_AUTOMOTIVE_EVS) draws into the layer
+// of rvc_display (as graphics). See rvc_early.cpp and rvc_display.cpp.
+
+aidl_interface {
+    name: "rvc_display_aidl",
+    unstable: true,
+    local_include_dir: "aidl",
+    srcs: ["aidl/com/schuurman/rvc/IRvcDisplay.aidl"],
+    include_dirs: ["frameworks/native/aidl/gui"],
+    backend: {
+        cpp: {
+            enabled: false,
+        },
+        java: {
+            enabled: false,
+        },
+        rust: {
+            enabled: false,
+        },
+        ndk: {
+            additional_shared_libraries: ["libnativewindow"],
+        },
+    },
+}
+
 cc_binary {
     name: "rvc_early",
     srcs: ["rvc_early.cpp"],
     init_rc: ["rvc_early.rc"],
+    required: ["rvc_display"],
     defaults: ["vhalclient_defaults"],
     static_libs: ["libvhalclient"],
     shared_libs: [
-        "android.frameworks.automotive.display-V2-ndk",
         "libbase",
         "libbinder_ndk",
         "libcamera2ndk",
         "liblog",
         "libmediandk",
         "libnativewindow",
+        "rvc_display_aidl-ndk",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}
+
+cc_binary {
+    name: "rvc_display",
+    srcs: ["rvc_display.cpp"],
+    shared_libs: [
+        "libbase",
+        "libbinder",
+        "libbinder_ndk",
+        "libgui",
+        "liblog",
+        "libnativewindow",
+        "libui",
+        "libutils",
+        "rvc_display_aidl-ndk",
     ],
     cflags: [
         "-Wall",

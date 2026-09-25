@@ -7,19 +7,19 @@
  * - opens the rear camera with the NDK Camera2 API. cameraserver only serves a client this early if
  *   it runs as AID_AUTOMOTIVE_EVS and the camera is an exterior system camera (see the external
  *   camera HAL's ro.vendor.camera.external.automotive_location)
- * - streams it into a full screen layer of the car display proxy (cardisplayproxyd), which sits
- *   above everything, the boot animation included
+ * - streams it into the layer of rvc_display, above everything, the boot animation included (only
+ *   graphics/system may create such a layer this early, so rvc_display owns it; it also mirrors and
+ *   scales the image as configured)
  *
  * Once Android has booted (sys.boot_completed) the RearViewCamera app takes over and this service
  * exits, after the car has left reverse if it was in reverse at that moment.
  *
- * The camera and stream are the ones configured in the RearViewCamera settings (persist.rvc.*).
- * The stream is scaled to the whole screen, which keeps the proportions of an analog (4:3) camera on
- * a 4:3 screen; mirroring is not supported here.
+ * The camera, stream, mirroring and scaling are the ones configured in the RearViewCamera settings
+ * (persist.rvc.*).
  */
 
 #include <IVhalClient.h>
-#include <aidl/android/frameworks/automotive/display/ICarDisplayProxy.h>
+#include <aidl/com/schuurman/rvc/IRvcDisplay.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android/binder_manager.h>
@@ -33,6 +33,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <functional>
 #include <cstdio>
 #include <memory>
 #include <optional>
@@ -42,7 +43,7 @@
 
 namespace {
 
-using ::aidl::android::frameworks::automotive::display::ICarDisplayProxy;
+using ::aidl::com::schuurman::rvc::IRvcDisplay;
 using ::android::frameworks::automotive::vhal::IVhalClient;
 using namespace std::chrono_literals;
 
@@ -52,7 +53,7 @@ constexpr int32_t kGearReverse = 0x0002;
 
 constexpr auto kPollInterval = 100ms;
 constexpr auto kRetryInterval = 500ms;
-constexpr const char* kDisplayProxy = "android.frameworks.automotive.display.ICarDisplayProxy/default";
+constexpr const char* kDisplayService = "rvc_display";
 
 struct Size {
     int32_t width;
@@ -80,8 +81,9 @@ class RearCamera {
         if (mManager != nullptr) ACameraManager_delete(mManager);
     }
 
-    // Starts streaming the configured camera into `window`. Returns false if it can't (yet).
-    bool start(ANativeWindow* window) {
+    // Starts streaming the configured camera into the window `getWindow` returns for the chosen
+    // stream size. Returns false if it can't (yet).
+    bool start(const std::function<ANativeWindow*(const Size&)>& getWindow) {
         if (mSession != nullptr) return true;
         if (mManager == nullptr) mManager = ACameraManager_create();
 
@@ -93,7 +95,8 @@ class RearCamera {
         const Size size = chooseStreamSize(*cameraId);
         LOG(INFO) << "Opening camera " << *cameraId << " stream " << size.width << "x" << size.height;
 
-        ANativeWindow_setBuffersGeometry(window, size.width, size.height, 0);
+        ANativeWindow* window = getWindow(size);
+        if (window == nullptr) return false;
         ACameraDevice_StateCallbacks deviceCallbacks = {
                 .context = this, .onDisconnected = onDisconnected, .onError = onError};
         if (auto s = ACameraManager_openCamera(mManager, cameraId->c_str(), &deviceCallbacks,
@@ -247,36 +250,31 @@ class RearCamera {
     ACaptureRequest* mRequest = nullptr;
 };
 
-// The full screen layer of the car display proxy on the main display.
-class ProxyWindow {
+// The camera layer, owned by rvc_display.
+class Display {
   public:
     bool init() {
-        if (!AServiceManager_isDeclared(kDisplayProxy)) {
-            LOG(ERROR) << kDisplayProxy << " is not declared";
-            return false;
-        }
-        mProxy = ICarDisplayProxy::fromBinder(ndk::SpAIBinder(AServiceManager_waitForService(kDisplayProxy)));
-        if (!mProxy) return false;
-        std::vector<int64_t> ids;
-        if (!mProxy->getDisplayIdList(&ids).isOk() || ids.empty()) {
-            LOG(ERROR) << "No display";
-            return false;
-        }
-        mDisplayId = ids[0];
-        if (!mProxy->getSurface(mDisplayId, &mSurface).isOk() || mSurface.get() == nullptr) {
-            LOG(ERROR) << "No surface for display " << mDisplayId;
-            return false;
-        }
-        return true;
+        mService = IRvcDisplay::fromBinder(ndk::SpAIBinder(AServiceManager_waitForService(kDisplayService)));
+        return mService != nullptr;
     }
 
-    ANativeWindow* window() { return mSurface.get(); }
-    void show() { mProxy->showWindow(mDisplayId); }
-    void hide() { mProxy->hideWindow(mDisplayId); }
+    ANativeWindow* surfaceFor(const Size& size) {
+        if (!mService->getSurface(size.width, size.height, &mSurface).isOk()) {
+            LOG(ERROR) << "No surface from " << kDisplayService;
+            return nullptr;
+        }
+        return mSurface.get();
+    }
+
+    void show() {
+        mService->show(android::base::GetBoolProperty("persist.rvc.mirror", false),
+                       android::base::GetProperty("persist.rvc.scale", "fit"));
+    }
+
+    void hide() { mService->hide(); }
 
   private:
-    std::shared_ptr<ICarDisplayProxy> mProxy;
-    int64_t mDisplayId = 0;
+    std::shared_ptr<IRvcDisplay> mService;
     aidl::android::view::Surface mSurface;
 };
 
@@ -309,8 +307,8 @@ int main() {
         std::this_thread::sleep_for(kRetryInterval);
     }
 
-    ProxyWindow proxy;
-    if (!proxy.init()) return 1;
+    Display display;
+    if (!display.init()) return 1;
     RearCamera camera;
     LOG(INFO) << "Watching the gear";
 
@@ -319,15 +317,15 @@ int main() {
         const bool reverse = isInReverse(*vhal);
         if (reverse && !camera.isStreaming()) {
             // cameraserver starts once /data is mounted, and a USB camera may still be probing.
-            if (camera.start(proxy.window())) {
-                proxy.show();
+            if (camera.start([&](const Size& size) { return display.surfaceFor(size); })) {
+                display.show();
                 shown = true;
             } else {
                 std::this_thread::sleep_for(kRetryInterval);
                 continue;
             }
         } else if (!reverse && shown) {
-            proxy.hide();
+            display.hide();
             camera.stop();
             shown = false;
             LOG(INFO) << "Preview stopped";

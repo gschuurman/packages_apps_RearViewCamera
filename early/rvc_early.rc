@@ -1,11 +1,22 @@
-# Rear view camera while Android boots (see rvc_early.cpp). Runs as AID_AUTOMOTIVE_EVS: the only
-# client cameraserver serves before system_server is up. Exits by itself once Android has booted.
+# Rear view camera while Android boots (see rvc_early.cpp, rvc_display.cpp).
+# rvc_early runs as AID_AUTOMOTIVE_EVS: the only client cameraserver serves before system_server.
+# It exits by itself once Android has booted, and rvc_display with it.
 service rvc_early /system/bin/rvc_early
     user automotive_evs
     group automotive_evs camera
     oneshot
     disabled
 
-# Same moment as the car display proxy, which it draws through.
+# Owns the camera's full screen layer: only graphics/system may create one before system_server.
+service rvc_display /system/bin/rvc_display
+    user graphics
+    group graphics
+    oneshot
+    disabled
+
 on late-init
+    start rvc_display
     start rvc_early
+
+on property:init.svc.rvc_early=stopped
+    stop rvc_display
