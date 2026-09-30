@@ -2,6 +2,7 @@
     <string name="app_name">Rear View Camera</string>
 
     <string name="rvc_settings_title">Rear view camera</string>
+    <string name="rvc_back">Back</string>
     <string name="rvc_settings_summary">Camera, video stream, image</string>
 
     <string name="rvc_camera_title">Camera</string>

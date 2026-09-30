@@ -13,25 +13,78 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- The rear view camera settings (RvcSettingsFragment), next to the live image. -->
-    <FrameLayout
+    <!-- The rear view camera settings (RvcSettingsFragment), next to the live image, under a header
+         with its own back button: the screen can't count on a system Back button. -->
+    <LinearLayout
         android:id="@+id/settings_panel"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_gravity="end"
         android:background="?android:attr/colorBackground"
-        android:visibility="gone" />
+        android:orientation="vertical"
+        android:visibility="gone">
 
-    <ImageButton
-        android:id="@+id/settings_button"
-        android:layout_width="96dp"
-        android:layout_height="96dp"
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="8dp">
+
+            <ImageButton
+                android:id="@+id/settings_close"
+                android:layout_width="76dp"
+                android:layout_height="76dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/rvc_back"
+                android:padding="20dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_rvc_back" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/rvc_settings_title"
+                android:textAppearance="?android:attr/textAppearanceLarge" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/settings_content"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <!-- Back (leave the camera screen) and settings, top left over the image. -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_gravity="top|start"
         android:layout_margin="16dp"
-        android:background="@drawable/bg_rvc_button"
-        android:contentDescription="@string/rvc_settings_title"
-        android:padding="16dp"
-        android:scaleType="fitCenter"
-        android:src="@drawable/ic_rvc_tune" />
+        android:orientation="vertical">
+
+        <ImageButton
+            android:id="@+id/back_button"
+            android:layout_width="96dp"
+            android:layout_height="96dp"
+            android:background="@drawable/bg_rvc_button"
+            android:contentDescription="@string/rvc_back"
+            android:padding="20dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_rvc_back" />
+
+        <ImageButton
+            android:id="@+id/settings_button"
+            android:layout_width="96dp"
+            android:layout_height="96dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_rvc_button"
+            android:contentDescription="@string/rvc_settings_title"
+            android:padding="16dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_rvc_tune" />
+    </LinearLayout>
 
 </FrameLayout>

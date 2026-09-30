@@ -1,5 +1,6 @@
 package com.schuurman.rvc;
 
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraManager;
@@ -35,6 +36,10 @@ public final class RvcSettingsFragment extends PreferenceFragment {
 
     private CameraManager mCameraManager;
 
+    private boolean isInCamera() {
+        return getArguments() != null && getArguments().getBoolean(ARG_IN_CAMERA);
+    }
+
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         getPreferenceManager().setPreferenceDataStore(new RvcConfig.DataStore());
@@ -48,7 +53,7 @@ public final class RvcSettingsFragment extends PreferenceFragment {
             return true;
         });
         final Preference preview = findPreference(KEY_PREVIEW);
-        if (getArguments() != null && getArguments().getBoolean(ARG_IN_CAMERA)) {
+        if (isInCamera()) {
             getPreferenceScreen().removePreference(preview);
         } else {
             preview.setOnPreferenceClickListener(p -> {
@@ -56,6 +61,34 @@ public final class RvcSettingsFragment extends PreferenceFragment {
                 return true;
             });
         }
+    }
+
+    /**
+     * On the camera screen a list opens as a pick list: tapping an entry applies it and closes the
+     * list. The car UI list page used elsewhere only saves on Back, and that screen has no toolbar
+     * and can't count on a system Back button.
+     */
+    @Override
+    public void onDisplayPreferenceDialog(Preference preference) {
+        if (!isInCamera() || !(preference instanceof ListPreference)) {
+            super.onDisplayPreferenceDialog(preference);
+            return;
+        }
+        final ListPreference list = (ListPreference) preference;
+        final CharSequence[] values = list.getEntryValues();
+        new AlertDialog.Builder(requireContext())
+                .setTitle(list.getTitle())
+                .setSingleChoiceItems(list.getEntries(), list.findIndexOfValue(list.getValue()),
+                        (dialog, which) -> {
+                            final String value = values[which].toString();
+                            if (list.callChangeListener(value)) {
+                                list.setValue(value);
+                                updateCameras();  // camera and stream summaries
+                            }
+                            dialog.dismiss();
+                        })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     @Override

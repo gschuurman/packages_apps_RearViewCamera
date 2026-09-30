@@ -72,6 +72,9 @@ public final class RearViewCameraActivity extends FragmentActivity implements Rv
 
         findViewById(R.id.settings_button).setOnClickListener(
                 v -> showSettings(mSettingsPanel.getVisibility() != View.VISIBLE));
+        findViewById(R.id.settings_close).setOnClickListener(v -> showSettings(false));
+        // Leaves the camera screen; the reverse gear starts it again on the next change.
+        findViewById(R.id.back_button).setOnClickListener(v -> finish());
         getOnBackPressedDispatcher().addCallback(this, mCloseSettings);
         // The panel survives a configuration change; keep the preview next to it.
         showSettings(getSupportFragmentManager().findFragmentByTag(SETTINGS_TAG) != null
@@ -127,7 +130,7 @@ public final class RearViewCameraActivity extends FragmentActivity implements Rv
     private void showSettings(boolean show) {
         if (show && getSupportFragmentManager().findFragmentByTag(SETTINGS_TAG) == null) {
             getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.settings_panel, RvcSettingsFragment.newInCameraInstance(),
+                    .replace(R.id.settings_content, RvcSettingsFragment.newInCameraInstance(),
                             SETTINGS_TAG)
                     .commitNow();
         }
