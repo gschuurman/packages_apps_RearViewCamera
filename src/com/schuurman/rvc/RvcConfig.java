@@ -80,7 +80,7 @@ final class RvcConfig {
     }
 
     static String getScale() {
-        return get(KEY_SCALE, SCALE_FIT);
+        return get(KEY_SCALE, SCALE_STRETCH);
     }
 
     static String toString(Size size) {

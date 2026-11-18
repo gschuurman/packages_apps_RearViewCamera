@@ -268,7 +268,7 @@ class Display {
 
     void show() {
         mService->show(android::base::GetBoolProperty("persist.rvc.mirror", false),
-                       android::base::GetProperty("persist.rvc.scale", "fit"));
+                       android::base::GetProperty("persist.rvc.scale", "stretch"));
     }
 
     void hide() { mService->hide(); }

@@ -14,7 +14,7 @@
         android:title="@string/rvc_stream_title" />
 
     <ListPreference
-        android:defaultValue="fit"
+        android:defaultValue="stretch"
         android:entries="@array/rvc_scale_entries"
         android:entryValues="@array/rvc_scale_values"
         android:key="scale"
